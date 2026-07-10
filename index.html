@@ -4,48 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Autenticador TOTP Jurídico</title>
-    <!-- Tailwind CSS -->
+    <!-- Bibliotecas Necessárias -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- bcryptjs -->
     <script src="https://unpkg.com/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-    <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&family=Inter:wght@400;500;600;700&display=swap');
-        
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0f172a;
-            color: #f1f5f9;
-        }
-
-        .totp-code {
-            font-family: 'JetBrains Mono', monospace;
-            letter-spacing: 0.05em;
-        }
-
-        .progress-bar {
-            transition: width 1s linear, background-color 0.3s ease;
-        }
-
-        .fade-in {
-            animation: fadeIn 0.3s ease-in-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #1e293b; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f1f5f9; }
+        .totp-code { font-family: 'JetBrains Mono', monospace; letter-spacing: 0.05em; }
+        .progress-bar { transition: width 1s linear, background-color 0.3s ease; }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
 
-    <!-- LOGIN SCREEN -->
+    <!-- TELA DE LOGIN -->
     <div id="login-screen" class="flex-grow flex items-center justify-center p-4">
         <div class="bg-slate-800 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 fade-in">
             <div class="text-center mb-8">
@@ -59,259 +33,188 @@
             <form id="login-form" class="space-y-6">
                 <div>
                     <label class="block text-sm font-medium text-slate-300 mb-2">Usuário</label>
-                    <div class="relative">
-                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
-                            <i class="ph ph-user"></i>
-                        </span>
-                        <input type="text" id="username" required
-                            class="block w-full pl-10 pr-3 py-3 bg-slate-900 border border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-white placeholder-slate-500 transition-all outline-none"
-                            placeholder="Seu usuário">
-                    </div>
+                    <input type="text" id="username" required class="block w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="Seu usuário">
                 </div>
-
                 <div>
                     <label class="block text-sm font-medium text-slate-300 mb-2">Senha</label>
-                    <div class="relative">
-                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
-                            <i class="ph ph-password"></i>
-                        </span>
-                        <input type="password" id="password" required
-                            class="block w-full pl-10 pr-3 py-3 bg-slate-900 border border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-white placeholder-slate-500 transition-all outline-none"
-                            placeholder="••••••••">
-                    </div>
+                    <input type="password" id="password" required class="block w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••">
                 </div>
-
-                <div id="login-error" class="hidden bg-red-900/30 border border-red-500/50 text-red-200 px-4 py-3 rounded-lg text-sm flex items-center gap-3">
-                    <i class="ph ph-warning-circle text-lg"></i>
-                    <span id="error-message">Usuário ou senha incorretos.</span>
+                <div id="login-error" class="hidden bg-red-900/30 border border-red-500/50 text-red-200 px-4 py-3 rounded-lg text-sm">
+                    Usuário ou senha incorretos.
                 </div>
-
-                <button type="submit" id="login-btn"
-                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 transform active:scale-[0.98] flex items-center justify-center gap-2">
-                    <i class="ph ph-sign-in"></i>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-all">
                     Entrar no Sistema
                 </button>
             </form>
         </div>
     </div>
 
-    <!-- APP SCREEN -->
+    <!-- TELA DO AUTENTICADOR (Oculta inicialmente) -->
     <div id="app-screen" class="hidden flex-grow flex flex-col">
         <header class="bg-slate-800 border-b border-slate-700 px-6 py-4">
             <div class="max-w-4xl mx-auto flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
-                        <span id="user-initial">U</span>
-                    </div>
+                    <div class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold" id="user-initial">U</div>
                     <div>
                         <p class="text-sm text-slate-400 leading-none">Bem-vindo,</p>
                         <p class="font-semibold text-white" id="display-username">Usuário</p>
                     </div>
                 </div>
-                <button id="logout-btn" class="flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
-                    <i class="ph ph-sign-out text-xl"></i>
-                    <span class="hidden sm:inline">Sair</span>
+                <button onclick="logout()" class="text-slate-400 hover:text-white flex items-center gap-2">
+                    <i class="ph ph-sign-out text-xl"></i> Sair
                 </button>
             </div>
         </header>
 
         <main class="flex-grow flex items-center justify-center p-6">
-            <div class="w-full max-w-lg">
-                <div class="bg-slate-800 rounded-3xl shadow-2xl border border-slate-700 overflow-hidden fade-in">
-                    <div class="p-8 text-center">
-                        <div class="flex items-center justify-center gap-2 text-blue-400 mb-6">
-                            <i class="ph ph-shield-check text-2xl"></i>
-                            <span class="text-sm font-semibold uppercase tracking-wider">Token de Segurança</span>
-                        </div>
-                        
-                        <div id="copy-btn" class="cursor-pointer group relative py-6 px-4 rounded-2xl hover:bg-slate-900/50 transition-all duration-200">
-                            <h2 id="totp-display" class="totp-code text-5xl sm:text-6xl font-bold text-white mb-2 tracking-widest">
-                                000 000
-                            </h2>
-                            <p id="copy-feedback" class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-xs py-1 px-3 rounded-full opacity-0 transition-opacity duration-200">
-                                Copiado!
-                            </p>
-                            <p class="text-slate-500 text-sm group-hover:text-slate-400 transition-colors flex items-center justify-center gap-1">
-                                <i class="ph ph-copy"></i> Clique para copiar
-                            </p>
-                        </div>
-
-                        <div class="mt-8 space-y-4">
-                            <div class="flex justify-between text-sm text-slate-400 mb-1">
-                                <span id="timer-text">Atualiza em 30 segundos</span>
-                                <span id="timer-percent">100%</span>
-                            </div>
-                            <div class="w-full bg-slate-900 h-3 rounded-full overflow-hidden">
-                                <div id="progress-bar" class="progress-bar h-full bg-blue-600 w-full"></div>
-                            </div>
-                        </div>
+            <div class="w-full max-w-lg bg-slate-800 rounded-3xl p-8 border border-slate-700 text-center">
+                <div id="copy-area" class="cursor-pointer group py-6 px-4 rounded-2xl hover:bg-slate-900/50 transition-all relative">
+                    <h2 id="totp-display" class="totp-code text-6xl font-bold text-white mb-2 tracking-widest">000 000</h2>
+                    <p id="copy-feedback" class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-xs py-1 px-3 rounded-full opacity-0 transition-opacity">Copiado!</p>
+                    <p class="text-slate-500 text-sm"><i class="ph ph-copy"></i> Clique para copiar</p>
+                </div>
+                <div class="mt-8">
+                    <div class="flex justify-between text-sm text-slate-400 mb-2">
+                        <span id="timer-text">Atualiza em 30s</span>
+                        <span id="timer-percent">100%</span>
+                    </div>
+                    <div class="w-full bg-slate-900 h-3 rounded-full overflow-hidden">
+                        <div id="progress-bar" class="progress-bar h-full bg-blue-600 w-full"></div>
                     </div>
                 </div>
-                
-                <div class="mt-8 text-center">
-                    <button id="export-logs-btn" class="inline-flex items-center gap-2 text-slate-500 hover:text-slate-300 text-sm transition-colors">
-                        <i class="ph ph-download-simple"></i>
-                        Exportar Logs de Auditoria
-                    </button>
-                </div>
+                <button onclick="exportLogs()" class="mt-8 text-slate-500 hover:text-slate-300 text-sm flex items-center gap-2 mx-auto">
+                    <i class="ph ph-download-simple"></i> Exportar Logs
+                </button>
             </div>
         </main>
-
-        <footer class="p-6 text-center text-slate-500 text-xs">
-            &copy; 2026 Sistema Jurídico • Acesso Seguro TOTP • 
-            <span id="last-update">Atualizado agora</span>
-        </footer>
     </div>
 
     <script>
-        // --- CONFIGURAÇÕES ---
+        // ==========================================
+        // CONFIGURAÇÕES (Não altere os hashes abaixo)
+        // ==========================================
         const TOTP_SECRET = "KBFG653GJI4GW3SWOZGHE32DNY2FCVSG";
+        
+        // As senhas estão protegidas por HASH BCRYPT para segurança.
+        // luiz: luiz2601*
+        // alisson: alisson2833*
+        // barbara: barbara6782*
         const USERS = {
             "luiz": "$2b$12$/213VyBi2is4rsU6/i.9k.B2qfurRd5S2UZVMpMxPyRXvzv.HTg/u",
             "alisson": "$2b$12$V5Xn.Y9wl1GZmxRRF9x.Au71nDeGklKDZHsmf0xZUIGrIIPU68mNe",
             "barbara": "$2b$12$3iKgiBDqtZfsdUDAkJd79.RjNIiR5MasQrhBTV6srtJI8N93FmGnC"
         };
-        const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
-        const MAX_LOGIN_ATTEMPTS = 5;
-        const LOCKOUT_TIME_MS = 5 * 60 * 1000;
 
-        let currentTimer = null;
-        let lastCode = null;
+        const SESSION_TIMEOUT = 30 * 60 * 1000;
+        let timer = null;
 
-        // --- TOTP ENGINE ---
-        async function totp(key, secs = 30, digits = 6){
-            return hotp(unbase32(key), pack64bu(Math.floor(Date.now() / 1000 / secs)), digits);
+        // --- LÓGICA TOTP ---
+        async function getTOTP(key) {
+            const epoch = Math.floor(Date.now() / 1000);
+            const counter = Math.floor(epoch / 30);
+            const k = await crypto.subtle.importKey('raw', unbase32(key), {name: 'HMAC', hash: 'SHA-1'}, false, ['sign']);
+            const hmac = await crypto.subtle.sign('HMAC', k, pack64(counter));
+            const code = truncate(hmac);
+            return code.toString().padStart(6, '0');
         }
-        async function hotp(key, counter, digits){
-            let y = self.crypto.subtle;
-            let k = await y.importKey('raw', key, {name: 'HMAC', hash: 'SHA-1'}, false, ['sign']);
-            return hotp_truncate(await y.sign('HMAC', k, counter), digits);
+        function truncate(buf) {
+            const a = new Uint8Array(buf), i = a[19] & 0xf;
+            return ((a[i]&0x7f)<<24 | a[i+1]<<16 | a[i+2]<<8 | a[i+3]) % 1000000;
         }
-        function hotp_truncate(buf, digits){
-            let a = new Uint8Array(buf), i = a[19] & 0xf;
-            return fmt(10, digits, ((a[i]&0x7f)<<24 | a[i+1]<<16 | a[i+2]<<8 | a[i+3]) % 10**digits);
-        }
-        function fmt(base, width, num){ return num.toString(base).padStart(width, '0'); }
-        function unbase32(s){
-            let t = (s.toLowerCase().replace(/\s/g, '').match(/\S/g)||[]).map(c => {
-                let i = 'abcdefghijklmnopqrstuvwxyz234567'.indexOf(c);
-                if(i < 0) throw Error("bad char");
-                return fmt(2, 5, i);
-            }).join('');
+        function unbase32(s) {
+            const b32 = "abcdefghijklmnopqrstuvwxyz234567";
+            let t = s.toLowerCase().replace(/\s/g, '').split('').map(c => b32.indexOf(c).toString(2).padStart(5, '0')).join('');
             return new Uint8Array(t.match(/.{8}/g).map(d => parseInt(d, 2)));
         }
-        function pack64bu(v){
-            let b = new ArrayBuffer(8), d = new DataView(b);
-            d.setUint32(0, Math.floor(v / 2**32));
-            d.setUint32(4, v & 0xFFFFFFFF);
+        function pack64(v) {
+            const b = new ArrayBuffer(8), d = new DataView(b);
+            d.setUint32(4, v);
             return b;
         }
 
         // --- AUDITORIA ---
-        function logAction(user, action, details = "") {
-            const logs = JSON.parse(localStorage.getItem('totp_audit_logs') || '[]');
-            logs.unshift({
-                timestamp: new Date().toISOString(),
-                localTime: new Date().toLocaleString('pt-BR'),
-                user: user || 'SISTEMA',
-                action: action,
-                details: details
-            });
-            localStorage.setItem('totp_audit_logs', JSON.stringify(logs.slice(0, 100)));
+        function log(action) {
+            const user = sessionStorage.getItem('user') || 'SISTEMA';
+            const logs = JSON.parse(localStorage.getItem('logs') || '[]');
+            logs.unshift({ time: new Date().toLocaleString('pt-BR'), user, action });
+            localStorage.setItem('logs', JSON.stringify(logs.slice(0, 100)));
         }
 
-        // --- CORE LOGIC ---
-        async function updateUI() {
-            try {
-                const code = await totp(TOTP_SECRET);
-                const display = document.getElementById('totp-display');
-                const progressBar = document.getElementById('progress-bar');
-                
-                display.textContent = code.slice(0, 3) + " " + code.slice(3);
-                
-                const remaining = 30 - (Math.floor(Date.now() / 1000) % 30);
-                const percent = (remaining / 30) * 100;
-                
-                progressBar.style.width = `${percent}%`;
-                document.getElementById('timer-text').textContent = `Atualiza em ${remaining} segundos`;
-                document.getElementById('timer-percent').textContent = `${Math.round(percent)}%`;
-
-                if (remaining <= 5) {
-                    display.classList.add('text-red-500');
-                    progressBar.classList.replace('bg-blue-600', 'bg-red-600');
-                } else {
-                    display.classList.remove('text-red-500');
-                    progressBar.classList.replace('bg-red-600', 'bg-blue-600');
-                }
-
-                if (code !== lastCode) {
-                    if (lastCode) logAction(sessionStorage.getItem('currentUser'), "codigo_atualizado");
-                    lastCode = code;
-                }
-            } catch (e) { console.error(e); }
+        // --- UI CONTROL ---
+        async function update() {
+            const code = await getTOTP(TOTP_SECRET);
+            const display = document.getElementById('totp-display');
+            const progress = document.getElementById('progress-bar');
+            const rem = 30 - (Math.floor(Date.now() / 1000) % 30);
+            
+            display.textContent = code.slice(0, 3) + " " + code.slice(3);
+            progress.style.width = `${(rem/30)*100}%`;
+            document.getElementById('timer-text').textContent = `Atualiza em ${rem}s`;
+            
+            if (rem <= 5) {
+                display.classList.add('text-red-500');
+                progress.classList.replace('bg-blue-600', 'bg-red-600');
+            } else {
+                display.classList.remove('text-red-500');
+                progress.classList.replace('bg-red-600', 'bg-blue-600');
+            }
         }
+
+        document.getElementById('login-form').onsubmit = (e) => {
+            e.preventDefault();
+            const u = document.getElementById('username').value.toLowerCase().trim();
+            const p = document.getElementById('password').value;
+            const hash = USERS[u];
+
+            if (hash && dcodeIO.bcrypt.compareSync(p, hash)) {
+                sessionStorage.setItem('user', u);
+                sessionStorage.setItem('start', Date.now());
+                log("login_sucesso");
+                location.reload();
+            } else {
+                log("login_falha: " + u);
+                document.getElementById('login-error').classList.remove('hidden');
+            }
+        };
 
         function logout() {
-            logAction(sessionStorage.getItem('currentUser'), "logout");
+            log("logout");
             sessionStorage.clear();
-            clearInterval(currentTimer);
             location.reload();
         }
 
-        document.getElementById('login-form').onsubmit = async (e) => {
-            e.preventDefault();
-            const user = document.getElementById('username').value.toLowerCase();
-            const pass = document.getElementById('password').value;
-            const errorDiv = document.getElementById('login-error');
-
-            const hash = USERS[user];
-            if (hash && dcodeIO.bcrypt.compareSync(pass, hash)) {
-                sessionStorage.setItem('currentUser', user);
-                sessionStorage.setItem('sessionStart', Date.now());
-                logAction(user, "login_sucesso");
-                location.reload();
-            } else {
-                logAction(user, "login_falha");
-                errorDiv.classList.remove('hidden');
-            }
-        };
-
         window.onload = () => {
-            const user = sessionStorage.getItem('currentUser');
-            const start = sessionStorage.getItem('sessionStart');
-            
-            if (user && start && (Date.now() - start < SESSION_TIMEOUT_MS)) {
+            const u = sessionStorage.getItem('user');
+            const s = sessionStorage.getItem('start');
+            if (u && s && (Date.now() - s < SESSION_TIMEOUT)) {
                 document.getElementById('login-screen').classList.add('hidden');
                 document.getElementById('app-screen').classList.remove('hidden');
-                document.getElementById('display-username').textContent = user.charAt(0).toUpperCase() + user.slice(1);
-                document.getElementById('user-initial').textContent = user.charAt(0).toUpperCase();
-                
-                updateUI();
-                currentTimer = setInterval(updateUI, 1000);
+                document.getElementById('display-username').textContent = u;
+                document.getElementById('user-initial').textContent = u[0].toUpperCase();
+                update();
+                timer = setInterval(update, 1000);
             }
         };
 
-        document.getElementById('logout-btn').onclick = logout;
-        document.getElementById('copy-btn').onclick = () => {
+        document.getElementById('copy-area').onclick = () => {
             const code = document.getElementById('totp-display').textContent.replace(/\s/g, '');
             navigator.clipboard.writeText(code).then(() => {
-                const feedback = document.getElementById('copy-feedback');
-                feedback.style.opacity = '1';
-                setTimeout(() => feedback.style.opacity = '0', 2000);
-                logAction(sessionStorage.getItem('currentUser'), "codigo_copiado");
+                const f = document.getElementById('copy-feedback');
+                f.style.opacity = '1';
+                setTimeout(() => f.style.opacity = '0', 2000);
+                log("codigo_copiado");
             });
         };
-        document.getElementById('export-logs-btn').onclick = () => {
-            const logs = JSON.parse(localStorage.getItem('totp_audit_logs') || '[]');
-            let csv = "Data/Hora (UTC),Data/Hora (Local),Usuario,Acao,Detalhes\n";
-            logs.forEach(l => csv += `"${l.timestamp}","${l.localTime}","${l.user}","${l.action}","${l.details}"\n`);
+
+        function exportLogs() {
+            const logs = JSON.parse(localStorage.getItem('logs') || '[]');
+            let csv = "Data,Usuario,Acao\n" + logs.map(l => `"${l.time}","${l.user}","${l.action}"`).join("\n");
             const blob = new Blob([csv], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url;
-            a.download = `totp_logs_${new Date().toISOString().split('T')[0]}.csv`;
+            a.href = URL.createObjectURL(blob);
+            a.download = "logs.csv";
             a.click();
-        };
+        }
     </script>
 </body>
 </html>
