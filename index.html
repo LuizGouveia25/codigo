@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autenticador TOTP - Equipe Jurídica</title>
+    <!-- Tailwind CSS for styling (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- bcryptjs for password hashing (CDN) -->
+    <script src="https://unpkg.com/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
+    <!-- Phosphor Icons for UI icons (CDN) -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            800: '#1e40af', // azul profissional
+                            900: '#1e3a8a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0f172a; /* Dark mode background */
+            color: #f8fafc;
+        }
+        .totp-font {
+            font-family: 'Courier New', Courier, monospace;
+            letter-spacing: 0.2em;
+        }
+        /* Custom scrollbar for logs */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="w-full max-w-md bg-slate-800 rounded-xl shadow-2xl p-8 border border-slate-700 transition-all duration-300">
+        <div class="text-center mb-8">
+            <i class="ph ph-shield-check text-5xl text-primary-500 mb-2"></i>
+            <h1 class="text-2xl font-bold text-white">Acesso Restrito</h1>
+            <p class="text-slate-400 mt-1">Autenticador Equipe Jurídica</p>
+        </div>
+
+        <form id="login-form" class="space-y-5">
+            <div>
+                <label for="username" class="block text-sm font-medium text-slate-300 mb-1">Usuário</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <i class="ph ph-user text-slate-400"></i>
+                    </div>
+                    <input type="text" id="username" name="username" required
+                        class="block w-full pl-10 pr-3 py-2 border border-slate-600 rounded-lg bg-slate-900 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                        placeholder="Ex: colaborador1">
+                </div>
+            </div>
+
+            <div>
+                <label for="password" class="block text-sm font-medium text-slate-300 mb-1">Senha</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <i class="ph ph-lock text-slate-400"></i>
+                    </div>
+                    <input type="password" id="password" name="password" required
+                        class="block w-full pl-10 pr-3 py-2 border border-slate-600 rounded-lg bg-slate-900 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                        placeholder="••••••••">
+                </div>
+            </div>
+
+            <div id="login-error" class="hidden bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
+                <i class="ph ph-warning-circle text-lg mt-0.5"></i>
+                <span id="login-error-msg">Credenciais inválidas.</span>
+            </div>
+
+            <button type="submit" id="login-btn"
+                class="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 focus:ring-offset-slate-800 transition-colors">
+                Entrar
+            </button>
+        </form>
+    </div>
+
+    <!-- APP SCREEN (TOTP) -->
+    <div id="app-screen" class="hidden w-full max-w-md bg-slate-800 rounded-xl shadow-2xl overflow-hidden border border-slate-700 transition-all duration-300">
+        <!-- Header -->
+        <div class="bg-slate-900 px-6 py-4 flex justify-between items-center border-b border-slate-700">
+            <div class="flex items-center gap-2">
+                <div class="h-8 w-8 rounded-full bg-primary-800 flex items-center justify-center border border-primary-500">
+                    <i class="ph ph-user text-white"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-slate-400">Sessão Ativa</p>
+                    <p id="current-user-display" class="text-sm font-semibold text-white truncate max-w-[120px]"></p>
+                </div>
+            </div>
+            <button id="logout-btn" class="text-sm text-slate-400 hover:text-white flex items-center gap-1 transition-colors px-2 py-1 rounded hover:bg-slate-800">
+                <i class="ph ph-sign-out"></i> Sair
+            </button>
+        </div>
+
+        <!-- Main Content -->
+        <div class="p-8 text-center">
+            <h2 class="text-lg font-medium text-slate-300 mb-6">Código de Autenticação</h2>
+            
+            <div class="relative group cursor-pointer" id="copy-btn" title="Clique para copiar">
+                <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 mb-2 hover:border-primary-500 transition-colors relative overflow-hidden">
+                    <!-- Progress Bar Background -->
+                    <div id="progress-bar" class="absolute bottom-0 left-0 h-1 bg-primary-500 transition-all duration-1000 ease-linear" style="width: 100%;"></div>
+                    
+                    <div class="flex justify-center items-center gap-4">
+                        <div id="totp-code" class="text-5xl font-bold text-white totp-font tracking-[0.25em]">------</div>
+                        <i class="ph ph-copy text-slate-400 group-hover:text-primary-400 text-2xl transition-colors"></i>
+                    </div>
+                </div>
+                <div id="copy-feedback" class="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-green-600 text-white text-xs px-2 py-1 rounded opacity-0 transition-opacity">
+                    Copiado!
+                </div>
+            </div>
+
+            <div class="flex items-center justify-center gap-2 text-sm text-slate-400 mt-4">
+                <i class="ph ph-clock"></i>
+                <span>Atualiza em <strong id="time-remaining" class="text-white">--</strong> segundos</span>
+            </div>
+        </div>
+
+        <!-- Footer / Admin -->
+        <div class="bg-slate-900/50 px-6 py-4 border-t border-slate-700 flex justify-between items-center">
+            <div class="text-xs text-slate-500">
+                <i class="ph ph-lock-key"></i> Conexão Segura
+            </div>
+            <button id="export-logs-btn" class="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1 transition-colors">
+                <i class="ph ph-download-simple"></i> Exportar Logs
+            </button>
+        </div>
+    </div>
+
+    <!-- TOTP Generator Logic (Standalone) -->
+    <script>
+        // TOTP Implementation based on Web Crypto API
+        // Adapted for standalone browser use
+        async function totp(key, secs = 30, digits = 6){
+            return hotp(unbase32(key), pack64bu(Math.floor(Date.now() / 1000 / secs)), digits);
+        }
+        async function hotp(key, counter, digits){
+            let y = self.crypto.subtle;
+            if(!y) throw Error('no self.crypto.subtle object available');
+            let k = await y.importKey('raw', key, {name: 'HMAC', hash: 'SHA-1'}, false, ['sign']);
+            return hotp_truncate(await y.sign('HMAC', k, counter), digits);
+        }
+        function hotp_truncate(buf, digits){
+            let a = new Uint8Array(buf), i = a[19] & 0xf;
+            return fmt(10, digits, ((a[i]&0x7f)<<24 | a[i+1]<<16 | a[i+2]<<8 | a[i+3]) % 10**digits);
+        }
+        function fmt(base, width, num){
+            return num.toString(base).padStart(width, '0')
+        }
+        function unbase32(s){
+            let t = (s.toLowerCase().match(/\S/g)||[]).map(c => {
+                let i = 'abcdefghijklmnopqrstuvwxyz234567'.indexOf(c);
+                if(i < 0) throw Error(`bad char '${c}' in key`);
+                return fmt(2, 5, i);
+            }).join('');
+            if(t.length < 8) throw Error('key too short');
+            return new Uint8Array(t.match(/.{8}/g).map(d => parseInt(d, 2)));
+        }
+        function pack64bu(v){
+            let b = new ArrayBuffer(8), d = new DataView(b);
+            d.setUint32(0, Math.floor(v / 2**32));
+            d.setUint32(4, v & 0xFFFFFFFF);
+            return b;
+        }
+    </script>
+
+    <!-- Main Application Logic -->
+    <script>
+        // ==========================================
+        // CONFIGURAÇÕES E DADOS SENSÍVEIS
+        // ==========================================
+        
+        // CHAVE SECRETA TOTP (Base32)
+        // Substitua pela chave real fornecida pelo TJMG
+        const TOTP_SECRET = "JBSWY3DPEHPK3PXP"; // Exemplo, INSIRA A CHAVE REAL AQUI
+        
+        // BASE DE USUÁRIOS (Senhas em hash bcrypt)
+        // Para gerar novos hashes, use bcrypt.hashSync("nova_senha", 12)
+        const USERS = {
+            "colaborador1": "$2b$12$DK0lSXjEo9IODlR7MG1aUO/GRiG9z5O/XbzYPbm4ReVwMYm6MTua2", // senha123
+            "colaborador2": "$2b$12$lMwkR24NXUhrNQfVELYBaOMXYQRZRXhC7D1aHCdmfTzs.FtrLlqfC", // senha456
+            "colaborador3": "$2b$12$DEQBwJ25uGJ0/orXc0Vu/O.eVLKcMdkvFxchzIuS6PYrXSK4aa.bi"  // senha789
+        };
+
+        const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutos
+        const MAX_LOGIN_ATTEMPTS = 5;
+        const LOCKOUT_TIME_MS = 5 * 60 * 1000; // 5 minutos de bloqueio
+
+        // ==========================================
+        // ESTADO DA APLICAÇÃO
+        // ==========================================
+        let totpInterval = null;
+        let lastGeneratedCode = null;
+
+        // ==========================================
+        // FUNÇÕES DE LOGGING (Auditoria)
+        // ==========================================
+        function logAction(username, action, details = "") {
+            try {
+                let logs = JSON.parse(localStorage.getItem('totp_audit_logs') || '[]');
+                
+                const now = new Date();
+                const logEntry = {
+                    timestamp: now.toISOString(),
+                    localTime: now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+                    user: username,
+                    action: action,
+                    details: details
+                };
+                
+                logs.unshift(logEntry); // Adiciona no início
+                
+                // Mantém apenas os últimos 100 registros
+                if (logs.length > 100) {
+                    logs = logs.slice(0, 100);
+                }
+                
+                localStorage.setItem('totp_audit_logs', JSON.stringify(logs));
+            } catch (e) {
+                console.error("Erro ao salvar log", e);
+            }
+        }
+
+        function exportLogsCSV() {
+            try {
+                const logs = JSON.parse(localStorage.getItem('totp_audit_logs') || '[]');
+                if (logs.length === 0) {
+                    alert("Nenhum log disponível para exportação.");
+                    return;
+                }
+
+                // Cabeçalho CSV
+                let csvContent = "Data/Hora (UTC),Data/Hora (Local),Usuario,Acao,Detalhes\n";
+                
+                // Linhas
+                logs.forEach(log => {
+                    const row = [
+                        `"${log.timestamp}"`,
+                        `"${log.localTime}"`,
+                        `"${log.user}"`,
+                        `"${log.action}"`,
+                        `"${log.details}"`
+                    ].join(",");
+                    csvContent += row + "\n";
+                });
+
+                // Download
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.setAttribute("href", url);
+                link.setAttribute("download", `totp_logs_${new Date().toISOString().split('T')[0]}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                const currentUser = sessionStorage.getItem('totp_current_user') || 'sistema';
+                logAction(currentUser, "exportacao_logs");
+                
+            } catch (e) {
+                console.error("Erro ao exportar logs", e);
+                alert("Erro ao exportar logs.");
+            }
+        }
+
+        // ==========================================
+        // GERENCIAMENTO DE SESSÃO E SEGURANÇA
+        // ==========================================
+        
+        function enforceHTTPS() {
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                alert("AVISO DE SEGURANÇA: Esta aplicação deve ser acessada via HTTPS. Credenciais podem ser interceptadas.");
+                // location.href = 'https:' + window.location.href.substring(window.location.protocol.length);
+            }
+        }
+
+        function checkRateLimit(username) {
+            const attemptsStr = localStorage.getItem(`login_attempts_${username}`);
+            if (!attemptsStr) return { allowed: true };
+            
+            const attempts = JSON.parse(attemptsStr);
+            const now = Date.now();
+            
+            // Limpa tentativas antigas (mais antigas que LOCKOUT_TIME_MS)
+            const recentAttempts = attempts.filter(time => now - time < LOCKOUT_TIME_MS);
+            
+            if (recentAttempts.length >= MAX_LOGIN_ATTEMPTS) {
+                const oldestAttempt = recentAttempts[0];
+                const timeRemaining = Math.ceil((LOCKOUT_TIME_MS - (now - oldestAttempt)) / 1000 / 60);
+                return { 
+                    allowed: false, 
+                    message: `Muitas tentativas falhas. Conta bloqueada por ${timeRemaining} minuto(s).` 
+                };
+            }
+            
+            return { allowed: true };
+        }
+
+        function recordFailedLogin(username) {
+            let attempts = JSON.parse(localStorage.getItem(`login_attempts_${username}`) || '[]');
+            const now = Date.now();
+            attempts.push(now);
+            
+            // Mantém apenas tentativas recentes
+            attempts = attempts.filter(time => now - time < LOCKOUT_TIME_MS);
+            localStorage.setItem(`login_attempts_${username}`, JSON.stringify(attempts));
+        }
+
+        function clearFailedLogins(username) {
+            localStorage.removeItem(`login_attempts_${username}`);
+        }
+
+        function initSession(username) {
+            sessionStorage.setItem('totp_current_user', username);
+            sessionStorage.setItem('totp_session_start', Date.now().toString());
+            logAction(username, "login_sucesso");
+            showAppScreen();
+        }
+
+        function checkSession() {
+            const user = sessionStorage.getItem('totp_current_user');
+            const startTime = sessionStorage.getItem('totp_session_start');
+            
+            if (user && startTime) {
+                const elapsed = Date.now() - parseInt(startTime);
+                if (elapsed < SESSION_TIMEOUT_MS) {
+                    // Renova sessão
+                    sessionStorage.setItem('totp_session_start', Date.now().toString());
+                    return true;
+                } else {
+                    // Sessão expirada
+                    logAction(user, "sessao_expirada");
+                    logout(false);
+                    showError("Sua sessão expirou. Faça login novamente.");
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        function logout(manual = true) {
+            const user = sessionStorage.getItem('totp_current_user');
+            if (user && manual) {
+                logAction(user, "logout");
+            }
+            sessionStorage.removeItem('totp_current_user');
+            sessionStorage.removeItem('totp_session_start');
+            stopTotpGenerator();
+            showLoginScreen();
+        }
+
+        // ==========================================
+        // UI INTERACTION
+        // ==========================================
+
+        function showError(message) {
+            const errorDiv = document.getElementById('login-error');
+            const errorMsg = document.getElementById('login-error-msg');
+            errorMsg.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+
+        function hideError() {
+            document.getElementById('login-error').classList.add('hidden');
+        }
+
+        function showLoginScreen() {
+            document.getElementById('app-screen').classList.add('hidden');
+            document.getElementById('login-screen').classList.remove('hidden');
+            document.getElementById('password').value = '';
+        }
+
+        function showAppScreen() {
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('app-screen').classList.remove('hidden');
+            
+            const user = sessionStorage.getItem('totp_current_user');
+            document.getElementById('current-user-display').textContent = user;
+            
+            startTotpGenerator();
+        }
+
+        // ==========================================
+        // TOTP GENERATION AND DISPLAY
+        // ==========================================
+
+        async function updateTotpDisplay() {
+            if (!checkSession()) return;
+
+            try {
+                const code = await totp(TOTP_SECRET);
+                
+                // Formata o código com espaço no meio (ex: 123 456)
+                const formattedCode = code.substring(0, 3) + ' ' + code.substring(3);
+                document.getElementById('totp-code').textContent = formattedCode;
+                
+                // Loga apenas quando um novo código é gerado
+                if (code !== lastGeneratedCode) {
+                    const user = sessionStorage.getItem('totp_current_user');
+                    if (lastGeneratedCode !== null) { // Não loga no primeiro render imediato
+                        logAction(user, "codigo_atualizado");
+                    }
+                    lastGeneratedCode = code;
+                }
+
+                // Atualiza barra de progresso e timer
+                const epoch = Math.floor(Date.now() / 1000);
+                const remaining = 30 - (epoch % 30);
+                
+                document.getElementById('time-remaining').textContent = remaining;
+                
+                const percentage = (remaining / 30) * 100;
+                const progressBar = document.getElementById('progress-bar');
+                progressBar.style.width = `${percentage}%`;
+                
+                // Muda cor da barra se estiver acabando
+                if (remaining <= 5) {
+                    progressBar.classList.remove('bg-primary-500');
+                    progressBar.classList.add('bg-red-500');
+                    document.getElementById('totp-code').classList.add('text-red-400');
+                } else {
+                    progressBar.classList.remove('bg-red-500');
+                    progressBar.classList.add('bg-primary-500');
+                    document.getElementById('totp-code').classList.remove('text-red-400');
+                }
+
+            } catch (error) {
+                console.error("Erro ao gerar TOTP:", error);
+                document.getElementById('totp-code').textContent = "ERRO";
+            }
+        }
+
+        function startTotpGenerator() {
+            updateTotpDisplay(); // Primeira chamada imediata
+            // Atualiza a cada segundo para manter o timer suave
+            totpInterval = setInterval(updateTotpDisplay, 1000);
+        }
+
+        function stopTotpGenerator() {
+            if (totpInterval) {
+                clearInterval(totpInterval);
+                totpInterval = null;
+            }
+            lastGeneratedCode = null;
+            document.getElementById('totp-code').textContent = "------";
+        }
+
+        async function copyToClipboard() {
+            const code = lastGeneratedCode;
+            if (!code) return;
+
+            try {
+                await navigator.clipboard.writeText(code);
+                
+                // Feedback visual
+                const feedback = document.getElementById('copy-feedback');
+                feedback.classList.remove('opacity-0');
+                feedback.classList.add('opacity-100', '-translate-y-2');
+                
+                const user = sessionStorage.getItem('totp_current_user');
+                logAction(user, "codigo_copiado");
+                
+                setTimeout(() => {
+                    feedback.classList.add('opacity-0');
+                    feedback.classList.remove('opacity-100', '-translate-y-2');
+                }, 2000);
+            } catch (err) {
+                console.error('Falha ao copiar:', err);
+                alert('Não foi possível copiar automaticamente. Selecione e copie o texto.');
+            }
+        }
+
+        // ==========================================
+        // EVENT LISTENERS
+        // ==========================================
+
+        document.addEventListener('DOMContentLoaded', () => {
+            enforceHTTPS();
+
+            // Se já estiver logado, vai direto pro app
+            if (checkSession()) {
+                showAppScreen();
+            }
+
+            // Login Form Submit
+            document.getElementById('login-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                hideError();
+                
+                const usernameInput = document.getElementById('username').value.trim();
+                const passwordInput = document.getElementById('password').value;
+                const btn = document.getElementById('login-btn');
+                
+                if (!usernameInput || !passwordInput) {
+                    showError("Preencha todos os campos.");
+                    return;
+                }
+
+                // Rate limiting check
+                const rateLimit = checkRateLimit(usernameInput);
+                if (!rateLimit.allowed) {
+                    showError(rateLimit.message);
+                    logAction(usernameInput, "login_bloqueado_rate_limit");
+                    return;
+                }
+
+                // Loading state
+                const originalBtnText = btn.innerHTML;
+                btn.innerHTML = '<i class="ph ph-spinner animate-spin text-lg"></i>';
+                btn.disabled = true;
+
+                // Use setTimeout to allow UI to update before heavy bcrypt computation
+                setTimeout(() => {
+                    try {
+                        const storedHash = USERS[usernameInput];
+                        
+                        if (storedHash && dcodeIO.bcrypt.compareSync(passwordInput, storedHash)) {
+                            // Sucesso
+                            clearFailedLogins(usernameInput);
+                            initSession(usernameInput);
+                        } else {
+                            // Falha
+                            recordFailedLogin(usernameInput);
+                            logAction(usernameInput, "login_falha");
+                            showError("Usuário ou senha incorretos.");
+                        }
+                    } catch (err) {
+                        console.error("Erro na autenticação:", err);
+                        showError("Erro interno durante autenticação.");
+                    } finally {
+                        btn.innerHTML = originalBtnText;
+                        btn.disabled = false;
+                    }
+                }, 50);
+            });
+
+            // Logout
+            document.getElementById('logout-btn').addEventListener('click', () => logout(true));
+
+            // Copy Code
+            document.getElementById('copy-btn').addEventListener('click', copyToClipboard);
+
+            // Export Logs
+            document.getElementById('export-logs-btn').addEventListener('click', exportLogsCSV);
+
+            // Verifica sessão periodicamente (a cada minuto)
+            setInterval(() => {
+                if (document.getElementById('app-screen').classList.contains('hidden') === false) {
+                    checkSession();
+                }
+            }, 60000);
+        });
+    </script>
+</body>
+</html>
